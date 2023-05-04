@@ -9,6 +9,7 @@ import { ethers } from "ethers";
 import Web3Modal from "web3modal";
 import { useNavigate } from "react-router-dom";
 import { ABI, ADDRESS } from "../contract";
+import { createEventListners } from "./createEventListeners";
 
 //this is the context to connect front end with smart contract
 //contains all the global states and helper function
@@ -23,6 +24,8 @@ export const GlobalContextProvider = ({ children }) => {
     type: "info",
     message: "",
   });
+
+  const navigate = useNavigate();
 
   //set the wallet address to the state
   const updateCurrentWalletAddress = async () => {
@@ -42,8 +45,8 @@ export const GlobalContextProvider = ({ children }) => {
   // set the smart contract the provider to the state
   useEffect(() => {
     const setSmartContractAndProvider = async () => {
-      const web3modal = new Web3Modal();
-      const connection = await web3modal.connect();
+      const web3Modal = new Web3Modal();
+      const connection = await web3Modal.connect();
       const newProvider = new ethers.providers.Web3Provider(connection);
       const signer = newProvider.getSigner();
       const newContract = new ethers.Contract(ADDRESS, ABI, signer);
@@ -51,8 +54,21 @@ export const GlobalContextProvider = ({ children }) => {
       setProvider(newProvider);
       setContract(newContract);
     };
+
     setSmartContractAndProvider();
   }, []);
+
+  useEffect(() => {
+    if (contract) {
+      createEventListners({
+        navigate,
+        contract,
+        provider,
+        walletAddress,
+        setShowAlert,
+      });
+    }
+  }, [contract]);
 
   useEffect(() => {
     if (showAlert?.status) {
