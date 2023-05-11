@@ -9,7 +9,21 @@ const JoinBattle = () => {
     useGlobalContext();
   const navigate = useNavigate();
 
-  const handleClick = async () => {};
+  const handleClick = async (battleName) => {
+    setBattleName(battleName);
+
+    try {
+      await contract.joinBattle(battleName);
+
+      setShowAlert({
+        status: true,
+        type: "success",
+        message: `Joining ${battleName}`,
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   return (
     <>
