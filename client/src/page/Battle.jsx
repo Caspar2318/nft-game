@@ -50,7 +50,7 @@ const Battle = () => {
         const player02 = await contract.getPlayer(player02Address);
 
         const p1Att = p1TokenData.attackStrength.toNumber();
-        const p1Def = p2TokenData.attachStrength.toNumber();
+        const p1Def = p1TokenData.attachStrength.toNumber();
         const p1H = player01.playerHealth.toNumber();
         const p1M = player01.playerMana.toNumber();
         const p2H = player02.playerHealth.toNumber();
