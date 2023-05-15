@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
 import styles from "../styles";
-import { Alert, ActionButton, Card, GameInfo, PlayerInfo } from "../components";
+import { ActionButton, Alert, Card, GameInfo, PlayerInfo } from "../components";
 import { useGlobalContext } from "../context";
 import {
   attack,
@@ -18,13 +18,16 @@ const Battle = () => {
   const {
     contract,
     gameData,
+    battleGround,
     walletAddress,
+    setErrorMessage,
     showAlert,
     setShowAlert,
-    battleGround,
+    player1Ref,
+    player2Ref,
   } = useGlobalContext();
-  const [player1, setPlayer1] = useState({});
   const [player2, setPlayer2] = useState({});
+  const [player1, setPlayer1] = useState({});
   const { battleName } = useParams();
   const navigate = useNavigate();
 
@@ -35,7 +38,7 @@ const Battle = () => {
         let player02Address = null;
 
         if (
-          gameData.activeBattle.player[0].toLowerCase() ===
+          gameData.activeBattle.players[0].toLowerCase() ===
           walletAddress.toLowerCase()
         ) {
           player01Address = gameData.activeBattle.players[0];
@@ -50,7 +53,7 @@ const Battle = () => {
         const player02 = await contract.getPlayer(player02Address);
 
         const p1Att = p1TokenData.attackStrength.toNumber();
-        const p1Def = p1TokenData.attachStrength.toNumber();
+        const p1Def = p1TokenData.defenseStrength.toNumber();
         const p1H = player01.playerHealth.toNumber();
         const p1M = player01.playerMana.toNumber();
         const p2H = player02.playerHealth.toNumber();
@@ -65,12 +68,38 @@ const Battle = () => {
         });
         setPlayer2({ ...player02, att: "X", def: "X", health: p2H, mana: p2M });
       } catch (error) {
-        console.log(error);
+        setErrorMessage(error.message);
       }
     };
 
     if (contract && gameData.activeBattle) getPlayerInfo();
   }, [contract, gameData, battleName]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!gameData?.activeBattle) navigate("/");
+    }, [2000]);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const makeAMove = async (choice) => {
+    playAudio(choice === 1 ? attackSound : defenseSound);
+
+    try {
+      await contract.attackOrDefendChoice(choice, battleName, {
+        gasLimit: 200000,
+      });
+
+      setShowAlert({
+        status: true,
+        type: "info",
+        message: `Initiating ${choice === 1 ? "attack" : "defense"}`,
+      });
+    } catch (error) {
+      setErrorMessage(error);
+    }
+  };
 
   return (
     <div
@@ -83,28 +112,36 @@ const Battle = () => {
       <PlayerInfo player={player2} playerIcon={player02Icon} mt />
 
       <div className={`${styles.flexCenter} flex-col my-10`}>
-        <Card card={player2} title={player2?.playerName} cardRef="" playerTwo />
+        <Card
+          card={player2}
+          title={player2?.playerName}
+          cardRef={player2Ref}
+          playerTwo
+        />
+
         <div className="flex items-center flex-row">
           <ActionButton
             imgUrl={attack}
-            handleClick={() => {}}
+            handleClick={() => makeAMove(1)}
             restStyles="mr-2 hover:border-yellow-400"
           />
+
           <Card
             card={player1}
             title={player1?.playerName}
-            cardRef=""
+            cardRef={player1Ref}
             restStyles="mt-3"
           />
+
           <ActionButton
             imgUrl={defense}
-            handleClick={() => {}}
+            handleClick={() => makeAMove(2)}
             restStyles="ml-6 hover:border-red-600"
           />
         </div>
       </div>
 
-      <PlayerInfo player={player1} playerIcon={player01Icon} mt />
+      <PlayerInfo player={player1} playerIcon={player01Icon} />
 
       <GameInfo />
     </div>
