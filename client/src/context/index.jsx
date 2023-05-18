@@ -8,34 +8,64 @@ import React, {
 import { ethers } from "ethers";
 import Web3Modal from "web3modal";
 import { useNavigate } from "react-router-dom";
-import { ABI, ADDRESS } from "../contract";
-import { createEventListners } from "./createEventListeners";
 
-//this is the context to connect front end with smart contract
-//contains all the global states and helper function
+import { GetParams } from "../utils/onboard.js";
+import { ABI, ADDRESS } from "../contract";
+import { createEventListeners } from "./createEventListeners";
+
 const GlobalContext = createContext();
 
 export const GlobalContextProvider = ({ children }) => {
   const [walletAddress, setWalletAddress] = useState("");
-  const [provider, setProvider] = useState("");
-  const [contract, setContract] = useState("");
+  const [battleGround, setBattleGround] = useState("bg-astral");
+  const [contract, setContract] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [step, setStep] = useState(1);
+  const [gameData, setGameData] = useState({
+    players: [],
+    pendingBattles: [],
+    activeBattle: null,
+  });
   const [showAlert, setShowAlert] = useState({
     status: false,
     type: "info",
     message: "",
   });
   const [battleName, setBattleName] = useState("");
-  const [gameData, setGameData] = useState({
-    players: [],
-    pendingBattles: [],
-    activeBattle: null,
-  });
+  const [errorMessage, setErrorMessage] = useState("");
   const [updateGameData, setUpdateGameData] = useState(0);
-  const [battleGround, setBattleGround] = useState("bg-astral");
+
+  const player1Ref = useRef();
+  const player2Ref = useRef();
 
   const navigate = useNavigate();
 
-  //set the wallet address to the state
+  //* Set battleground to local storage
+  useEffect(() => {
+    const isBattleground = localStorage.getItem("battleground");
+
+    if (isBattleground) {
+      setBattleGround(isBattleground);
+    } else {
+      localStorage.setItem("battleground", battleGround);
+    }
+  }, []);
+
+  //* Reset web3 onboarding modal params
+  useEffect(() => {
+    const resetParams = async () => {
+      const currentStep = await GetParams();
+
+      setStep(currentStep.step);
+    };
+
+    resetParams();
+
+    window?.ethereum?.on("chainChanged", () => resetParams());
+    window?.ethereum?.on("accountsChanged", () => resetParams());
+  }, []);
+
+  //* Set the wallet address to the state
   const updateCurrentWalletAddress = async () => {
     const accounts = await window?.ethereum?.request({
       method: "eth_requestAccounts",
@@ -50,7 +80,7 @@ export const GlobalContextProvider = ({ children }) => {
     window?.ethereum?.on("accountsChanged", updateCurrentWalletAddress);
   }, []);
 
-  // set the smart contract the provider to the state
+  //* Set the smart contract and provider to the state
   useEffect(() => {
     const setSmartContractAndProvider = async () => {
       const web3Modal = new Web3Modal();
@@ -66,19 +96,52 @@ export const GlobalContextProvider = ({ children }) => {
     setSmartContractAndProvider();
   }, []);
 
+  //* Activate event listeners for the smart contract
   useEffect(() => {
-    if (contract) {
-      createEventListners({
+    if (step === -1 && contract) {
+      createEventListeners({
         navigate,
         contract,
         provider,
         walletAddress,
         setShowAlert,
+        player1Ref,
+        player2Ref,
         setUpdateGameData,
       });
     }
-  }, [contract]);
+  }, [step]);
 
+  //* Set the game data to the state
+  useEffect(() => {
+    const fetchGameData = async () => {
+      if (contract) {
+        const fetchedBattles = await contract.getAllBattles();
+        const pendingBattles = fetchedBattles.filter(
+          (battle) => battle.battleStatus === 0
+        );
+        let activeBattle = null;
+
+        fetchedBattles.forEach((battle) => {
+          if (
+            battle.players.find(
+              (player) => player.toLowerCase() === walletAddress.toLowerCase()
+            )
+          ) {
+            if (battle.winner.startsWith("0x00")) {
+              activeBattle = battle;
+            }
+          }
+        });
+
+        setGameData({ pendingBattles: pendingBattles.slice(1), activeBattle });
+      }
+    };
+
+    fetchGameData();
+  }, [contract, updateGameData]);
+
+  //* Handle alerts
   useEffect(() => {
     if (showAlert?.status) {
       const timer = setTimeout(() => {
@@ -89,45 +152,40 @@ export const GlobalContextProvider = ({ children }) => {
     }
   }, [showAlert]);
 
-  // set game data to the state
+  //* Handle error messages
   useEffect(() => {
-    const fetchGameData = async () => {
-      const fetchedBattles = await contract.getAllBattles();
-      const pendingBattles = fetchedBattles.filter(
-        (battle) => battle.battleStatus === 0
-      );
-      let activeBattle = null;
+    if (errorMessage) {
+      const parsedErrorMessage = errorMessage?.reason
+        ?.slice("execution reverted: ".length)
+        .slice(0, -1);
 
-      fetchedBattles.forEach((battle) => {
-        if (
-          battle.players.find(
-            (player) => player.toLowerCase() === walletAddress.toLowerCase()
-          )
-        ) {
-          if (battle.winner.startsWith("0x00")) {
-            activeBattle = battle;
-          }
-        }
-      });
-
-      setGameData({ pendingBattles: pendingBattles.slice(1), activeBattle });
-    };
-
-    if (contract) fetchGameData();
-  }, [contract, updateGameData]);
+      if (parsedErrorMessage) {
+        setShowAlert({
+          status: true,
+          type: "failure",
+          message: parsedErrorMessage,
+        });
+      }
+    }
+  }, [errorMessage]);
 
   return (
     <GlobalContext.Provider
       value={{
+        player1Ref,
+        player2Ref,
+        battleGround,
+        setBattleGround,
         contract,
+        gameData,
         walletAddress,
+        updateCurrentWalletAddress,
         showAlert,
         setShowAlert,
         battleName,
         setBattleName,
-        gameData,
-        battleGround,
-        setBattleGround,
+        errorMessage,
+        setErrorMessage,
       }}
     >
       {children}
